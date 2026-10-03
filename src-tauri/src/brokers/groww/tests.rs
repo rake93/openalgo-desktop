@@ -1395,3 +1395,21 @@ mod http_round_trip {
         assert!(matches!(end, Ok(None)));
     }
 }
+
+#[tokio::test]
+async fn order_feed_is_the_poller_and_logout_stops_it() {
+    use crate::brokers::common::streaming::OrderFeed;
+    let b = GrowwBroker::with_base_url(master(), "http://127.0.0.1:9");
+    let auth = AuthToken::new("tok");
+    let feed = b.create_order_feed(&auth).unwrap();
+    assert!(b.order_updates_running());
+    b.on_logout().await;
+    assert!(!b.order_updates_running());
+    // The update channel closes with the poller.
+    let OrderFeed::Stream(mut rx) = feed else {
+        panic!("expected the poller stream")
+    };
+    let closed = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv()).await;
+    assert!(matches!(closed, Ok(None)));
+    assert!(b.create_order_feed(&AuthToken::new(" ")).is_err());
+}

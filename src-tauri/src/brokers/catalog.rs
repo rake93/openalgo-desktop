@@ -63,9 +63,39 @@ pub fn auth_type(broker: &str) -> AuthType {
     }
 }
 
+/// A broker authorize URL and the callback address it was built with. The
+/// login flow records `redirect_uri` with the pending sign-in and hands it
+/// to the code exchange (`BrokerCredentials::redirect_uri`): Upstox refuses
+/// an exchange whose redirect differs from the authorize URL's by a byte.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthorizeUrl {
+    pub url: String,
+    pub redirect_uri: String,
+}
+
+/// Whether the broker's redirect carries the `state` OpenAlgo sent. Dhan's
+/// consent redirect returns only `tokenId`, so its pending sign-in is
+/// matched by broker instead (single use, short expiry).
+pub fn callback_carries_state(broker: &str) -> bool {
+    !matches!(broker, "dhan")
+}
+
 /// Authorize URL with the server-generated `state`, or `None` when the
-/// broker has no OAuth flow wired in this build.
+/// broker has no static OAuth URL (`Broker::begin_login` may build one).
 pub fn authorize_url(
+    broker: &str,
+    api_key: &str,
+    redirect_url: &str,
+    state: &str,
+) -> Option<AuthorizeUrl> {
+    let url = authorize_url_string(broker, api_key, redirect_url, state)?;
+    Some(AuthorizeUrl {
+        url,
+        redirect_uri: redirect_url.to_string(),
+    })
+}
+
+fn authorize_url_string(
     broker: &str,
     api_key: &str,
     redirect_url: &str,
@@ -85,16 +115,13 @@ pub fn authorize_url(
             enc(redirect_url),
             enc(state)
         )),
-        "upstox" => {
-            // The code exchange must repeat this redirect byte for byte.
-            crate::brokers::upstox::remember_redirect_uri(redirect_url);
-            Some(format!(
+        // The code exchange repeats this redirect byte for byte.
+        "upstox" => Some(format!(
             "https://api.upstox.com/v2/login/authorization/dialog?response_type=code&client_id={}&redirect_uri={}&state={}",
             enc(api_key),
             enc(redirect_url),
             enc(state)
-        ))
-        }
+        )),
         // XTS third-party login; the session comes back as `session`.
         "compositedge" | "rmoney" => {
             crate::brokers::families::xts::thirdparty_url(broker, api_key, redirect_url, state)
@@ -121,6 +148,29 @@ pub fn authorize_url(
             api_key,
             state,
         )),
+        _ => None,
+    }
+}
+
+/// Which `BrokerCredentials` field a login-form field fills.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CredentialSlot {
+    /// `client_id`: user id, client code, mobile number.
+    ClientId,
+    /// `password`: password, PIN, MPIN, or a pasted access token.
+    Password,
+    /// `totp`: TOTP, two-factor code, OTP.
+    Totp,
+}
+
+/// The credential a form field name fills (web field names).
+pub fn credential_slot(name: &str) -> Option<CredentialSlot> {
+    match name {
+        "userid" | "clientid" | "client_id" | "mobile" | "mobilenumber" => {
+            Some(CredentialSlot::ClientId)
+        }
+        "pin" | "password" | "mpin" | "access_token" => Some(CredentialSlot::Password),
+        "totp" | "twofa" | "otp" => Some(CredentialSlot::Totp),
         _ => None,
     }
 }
@@ -203,6 +253,14 @@ pub fn login_fields(broker: &str) -> &'static [LoginField] {
                 required: true,
             },
         ],
+        // Dhan signs in by consent redirect; a pasted access token (web
+        // brlogin `access_token`) is accepted through the form instead.
+        "dhan" => &[LoginField {
+            name: "access_token",
+            label: "Access token (if you paste one from Dhan)",
+            secret: true,
+            required: true,
+        }],
         _ => &[],
     }
 }
@@ -267,7 +325,8 @@ mod tests {
             "http://127.0.0.1:5000/zerodha/callback",
             "st1",
         )
-        .unwrap();
+        .unwrap()
+        .url;
         assert!(z.contains("api_key=kkey"));
         assert!(z.contains("redirect_params=state%3Dst1"));
         let f = authorize_url(
@@ -277,6 +336,8 @@ mod tests {
             "st2",
         )
         .unwrap();
+        assert_eq!(f.redirect_uri, "http://127.0.0.1:5000/fyers/callback");
+        let f = f.url;
         assert!(f.contains("state=st2"));
         assert!(f.contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A5000%2Ffyers%2Fcallback"));
         assert!(authorize_url("angel", "k", "r", "s").is_none());
@@ -305,7 +366,15 @@ mod tests {
         assert_eq!(auth_type("dhan_sandbox"), AuthType::Form);
         // The sandbox signs in with the stored token alone.
         assert!(login_fields("dhan_sandbox").is_empty());
-        assert!(login_fields("dhan").is_empty());
+        assert_eq!(login_fields("dhan")[0].name, "access_token");
+        assert_eq!(
+            credential_slot("access_token"),
+            Some(CredentialSlot::Password)
+        );
+        assert_eq!(credential_slot("mobile"), Some(CredentialSlot::ClientId));
+        assert_eq!(credential_slot("otp"), Some(CredentialSlot::Totp));
+        assert!(!callback_carries_state("dhan"));
+        assert!(callback_carries_state("upstox"));
     }
 
     #[test]
@@ -321,12 +390,13 @@ mod tests {
     fn noren_family_sign_in() {
         for b in ["shoonya", "zebu", "tradesmart", "flattrade"] {
             assert_eq!(auth_type(b), AuthType::OAuth, "{}", b);
-            let u = authorize_url(b, "U1:::APPKEY", "r", "st9").unwrap();
+            let u = authorize_url(b, "U1:::APPKEY", "r", "st9").unwrap().url;
             assert!(u.contains("APPKEY") && u.ends_with("state=st9"), "{}", u);
             assert!(!u.contains("U1"));
         }
         assert!(authorize_url("zebu", "k", "r", "s")
             .unwrap()
+            .url
             .starts_with("https://go.mynt.in/OAuthlogin/authorize/oauth?client_id=k"));
         assert_eq!(auth_type("firstock"), AuthType::Form);
         let f = login_fields("firstock");

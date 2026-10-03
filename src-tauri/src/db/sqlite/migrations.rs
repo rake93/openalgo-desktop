@@ -41,6 +41,16 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     )?;
     run_rust_migration(conn, "061_watchlists", super::watchlist::migrate)?;
     run_rust_migration(conn, "062_alert_log", super::alert_log::migrate)?;
+    run_rust_migration(
+        conn,
+        "063_pending_oauth_redirect",
+        m063_pending_oauth_redirect,
+    )?;
+    run_rust_migration(
+        conn,
+        "064_master_contract_status",
+        super::master_contract_status::migrate,
+    )?;
 
     tracing::info!("Database migrations completed");
     Ok(())
@@ -259,6 +269,14 @@ fn m040_pending_oauth(conn: &Connection) -> Result<()> {
             expires_at TEXT NOT NULL
         );",
     )?;
+    Ok(())
+}
+
+/// The callback address a pending sign-in's authorize URL was built with,
+/// for the code exchange (Upstox checks it byte for byte). Rows from before
+/// the column have none and fall back to the web convention.
+fn m063_pending_oauth_redirect(conn: &Connection) -> Result<()> {
+    add_column(conn, "pending_oauth", "redirect_uri", "TEXT")?;
     Ok(())
 }
 

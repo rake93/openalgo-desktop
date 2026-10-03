@@ -71,6 +71,14 @@ pub struct AppState {
     pub api_keys: ApiKeyCache,
     pub broker_session: RwLock<Option<BrokerSession>>,
     pub server_status: RwLock<ServerStatus>,
+    /// State of the 8765 market data listener (written by `FeedService`),
+    /// shown with the fix when its port is taken.
+    pub feed_status: RwLock<ServerStatus>,
+    /// The feed server's source over the broker managers.
+    pub bridge: Arc<crate::feed::bridge::BrokerBridge>,
+    /// Broker session streaming: master contract, feeds, order updates.
+    pub runtime: crate::services::broker_runtime::BrokerRuntime,
+    me: std::sync::Weak<AppState>,
     /// Shared outbound HTTP client (explicit timeouts) for non-broker calls.
     pub http: reqwest::Client,
     pub shutdown: CancellationToken,
@@ -129,6 +137,13 @@ impl AppState {
         let symbols = opts.brokers.symbols();
         let sandbox_bus = bus.clone();
         let sandbox_clock = opts.clock.clone();
+        let websocket = Arc::new(WebSocketManager::new());
+        let runtime = crate::services::broker_runtime::BrokerRuntime::new();
+        let bridge = crate::feed::bridge::BrokerBridge::with_depth_manager(
+            websocket.clone(),
+            runtime.depth_ws.clone(),
+            symbols.clone(),
+        );
         let ctx = Arc::new_cyclic(|me: &std::sync::Weak<Self>| Self {
             sandbox: crate::sandbox::Sandbox::with_db(
                 sandbox_db,
@@ -148,7 +163,10 @@ impl AppState {
             security,
             symbols,
             brokers: opts.brokers,
-            websocket: Arc::new(WebSocketManager::new()),
+            websocket,
+            bridge,
+            runtime,
+            me: me.clone(),
             bus,
             ui,
             clock: opts.clock,
@@ -158,6 +176,7 @@ impl AppState {
             api_keys: ApiKeyCache::new(),
             broker_session: RwLock::new(None),
             server_status: RwLock::new(ServerStatus::Starting),
+            feed_status: RwLock::new(ServerStatus::Starting),
             http,
             shutdown: CancellationToken::new(),
             tasks: Mutex::new(JoinSet::new()),
@@ -198,16 +217,22 @@ impl AppState {
         self.tasks.lock().len()
     }
 
-    /// Stop background work: cancel, drain the bus, abort owned tasks,
-    /// close the market feed.
+    /// The context as an `Arc` (for work that outlives a call).
+    pub fn arc(&self) -> Option<Arc<Self>> {
+        self.me.upgrade()
+    }
+
+    /// Stop background work: cancel, stop the broker session's streaming
+    /// (feeds, order updates, adapter pollers), drain the bus, abort owned
+    /// tasks.
     pub async fn shutdown(&self) {
         self.shutdown.cancel();
+        self.runtime.teardown(self).await;
         self.sandbox.shutdown().await;
         self.bus.shutdown(Duration::from_secs(2)).await;
         let mut tasks = std::mem::take(&mut *self.tasks.lock());
         tasks.abort_all();
         while tasks.join_next().await.is_some() {}
-        let _ = self.websocket.disconnect().await;
     }
 
     pub fn now(&self) -> DateTime<Utc> {
