@@ -203,6 +203,23 @@ pub fn login_fields(broker: &str) -> &'static [LoginField] {
                 required: true,
             },
         ],
+        // INDmoney (INDstocks): the stored API key is the Client ID; MPIN and
+        // TOTP mint a 24-hour token. Both are optional because a pasted
+        // token saved as the API secret signs in without them.
+        "indmoney" => &[
+            LoginField {
+                name: "mpin",
+                label: "MPIN",
+                secret: true,
+                required: false,
+            },
+            LoginField {
+                name: "totp",
+                label: "TOTP from your authenticator app",
+                secret: true,
+                required: false,
+            },
+        ],
         _ => &[],
     }
 }
@@ -337,6 +354,14 @@ mod tests {
         assert!(f[1].secret && !f[0].secret);
         let p = q(&[("code", "c1"), ("state", "s")]);
         assert_eq!(extract_code("shoonya", &p).as_deref(), Some("c1"));
+    }
+
+    #[test]
+    fn indmoney_login_fields_are_mpin_and_totp() {
+        assert_eq!(auth_type("indmoney"), AuthType::Form);
+        let f = login_fields("indmoney");
+        assert_eq!(f.iter().map(|x| x.name).collect::<Vec<_>>(), ["mpin", "totp"]);
+        assert!(f.iter().all(|x| x.secret && !x.required));
     }
 
     #[test]

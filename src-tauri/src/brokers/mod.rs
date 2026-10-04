@@ -20,6 +20,7 @@ pub mod fyers;
 pub mod groww;
 pub mod ibulls;
 pub mod iifl;
+pub mod indmoney;
 pub mod jainamxts;
 pub mod kotak;
 #[cfg(any(test, feature = "test-support"))]
@@ -342,6 +343,7 @@ impl BrokerRegistry {
             Arc::new(tradesmart::broker(symbols.clone())),
             Arc::new(zebu::broker(symbols.clone())),
             Arc::new(firstock::FirstockBroker::new(symbols.clone())),
+            Arc::new(indmoney::IndmoneyBroker::new(symbols.clone())),
         ];
         Self::with_symbols(symbols, brokers)
     }
@@ -419,6 +421,7 @@ mod tests {
                 "groww",
                 "ibulls",
                 "iifl",
+                "indmoney",
                 "jainamxts",
                 "kotak",
                 "rmoney",
