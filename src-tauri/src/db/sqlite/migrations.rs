@@ -41,6 +41,11 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     )?;
     run_rust_migration(conn, "061_watchlists", super::watchlist::migrate)?;
     run_rust_migration(conn, "062_alert_log", super::alert_log::migrate)?;
+    run_rust_migration(
+        conn,
+        "065_symtoken_contract_value",
+        super::symbol::migrate_contract_value,
+    )?;
 
     tracing::info!("Database migrations completed");
     Ok(())
