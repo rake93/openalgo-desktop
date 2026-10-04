@@ -203,6 +203,15 @@ pub fn login_fields(broker: &str) -> &'static [LoginField] {
                 required: true,
             },
         ],
+        // Nubra (web authenticate_broker_totp): the stored API key is the
+        // registered mobile number and the secret the MPIN; the form
+        // carries the TOTP from the authenticator app.
+        "nubra" => &[LoginField {
+            name: "totp",
+            label: "TOTP from your authenticator app",
+            secret: true,
+            required: true,
+        }],
         _ => &[],
     }
 }
@@ -337,6 +346,16 @@ mod tests {
         assert!(f[1].secret && !f[0].secret);
         let p = q(&[("code", "c1"), ("state", "s")]);
         assert_eq!(extract_code("shoonya", &p).as_deref(), Some("c1"));
+    }
+
+    #[test]
+    fn nubra_signs_in_with_a_totp_form() {
+        assert_eq!(auth_type("nubra"), AuthType::Form);
+        let f = login_fields("nubra");
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].name, "totp");
+        assert!(f[0].secret && f[0].required);
+        assert!(authorize_url("nubra", "k", "r", "s").is_none());
     }
 
     #[test]
