@@ -347,6 +347,7 @@ impl BrokerRegistry {
             Arc::new(tradesmart::broker(symbols.clone())),
             Arc::new(zebu::broker(symbols.clone())),
             Arc::new(firstock::FirstockBroker::new(symbols.clone())),
+            Arc::new(samco::SamcoBroker::new(symbols.clone())),
         ];
         Self::with_symbols(symbols, brokers)
     }
@@ -427,6 +428,7 @@ mod tests {
                 "jainamxts",
                 "kotak",
                 "rmoney",
+                "samco",
                 "shoonya",
                 "tradesmart",
                 "upstox",
