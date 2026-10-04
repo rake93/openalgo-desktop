@@ -36,6 +36,7 @@ mod broker_groww_feed;
 mod broker_groww_hygiene;
 mod broker_kotak_adapter;
 mod broker_kotak_feed;
+mod broker_session_e2e;
 mod broker_upstox_feed;
 mod broker_upstox_feed_hygiene;
 mod broker_upstox_rest;
