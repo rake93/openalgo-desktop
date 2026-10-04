@@ -26,6 +26,7 @@ pub mod kotak;
 pub mod mock;
 pub mod rmoney;
 pub mod shoonya;
+pub mod tradejini;
 pub mod tradesmart;
 pub mod types;
 pub mod upstox;
@@ -342,6 +343,7 @@ impl BrokerRegistry {
             Arc::new(tradesmart::broker(symbols.clone())),
             Arc::new(zebu::broker(symbols.clone())),
             Arc::new(firstock::FirstockBroker::new(symbols.clone())),
+            Arc::new(tradejini::TradejiniBroker::new(symbols.clone())),
         ];
         Self::with_symbols(symbols, brokers)
     }
@@ -423,6 +425,7 @@ mod tests {
                 "kotak",
                 "rmoney",
                 "shoonya",
+                "tradejini",
                 "tradesmart",
                 "upstox",
                 "wisdom",

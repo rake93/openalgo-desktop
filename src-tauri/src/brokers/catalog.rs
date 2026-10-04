@@ -203,6 +203,23 @@ pub fn login_fields(broker: &str) -> &'static [LoginField] {
                 required: true,
             },
         ],
+        // Tradejini (web BrokerTOTP form): the CubePlus login PIN goes in
+        // `password`, the authenticator code in `twofa`. The stored API key
+        // is the individual app's API key.
+        "tradejini" => &[
+            LoginField {
+                name: "password",
+                label: "CubePlus login PIN",
+                secret: true,
+                required: true,
+            },
+            LoginField {
+                name: "twofa",
+                label: "TOTP",
+                secret: true,
+                required: true,
+            },
+        ],
         _ => &[],
     }
 }
@@ -337,6 +354,18 @@ mod tests {
         assert!(f[1].secret && !f[0].secret);
         let p = q(&[("code", "c1"), ("state", "s")]);
         assert_eq!(extract_code("shoonya", &p).as_deref(), Some("c1"));
+    }
+
+    #[test]
+    fn tradejini_login_fields_are_pin_and_totp() {
+        assert_eq!(auth_type("tradejini"), AuthType::Form);
+        let f = login_fields("tradejini");
+        assert_eq!(
+            f.iter().map(|x| x.name).collect::<Vec<_>>(),
+            ["password", "twofa"]
+        );
+        assert!(f.iter().all(|x| x.secret && x.required));
+        assert!(authorize_url("tradejini", "k", "r", "s").is_none());
     }
 
     #[test]
