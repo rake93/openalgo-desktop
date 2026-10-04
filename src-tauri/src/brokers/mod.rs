@@ -18,6 +18,7 @@ pub mod fivepaisaxts;
 pub mod flattrade;
 pub mod fyers;
 pub mod groww;
+pub mod hdfcsky;
 pub mod ibulls;
 pub mod iifl;
 pub mod jainamxts;
@@ -327,6 +328,7 @@ impl BrokerRegistry {
             Arc::new(fyers::FyersBroker::new(symbols.clone())),
             Arc::new(upstox::UpstoxBroker::new(symbols.clone())),
             Arc::new(groww::GrowwBroker::new(symbols.clone())),
+            Arc::new(hdfcsky::HdfcSkyBroker::new(symbols.clone())),
             Arc::new(dhan::DhanBroker::new(symbols.clone())),
             Arc::new(dhan_sandbox::broker(symbols.clone())),
             Arc::new(kotak::KotakBroker::new(symbols.clone())),
@@ -417,6 +419,7 @@ mod tests {
                 "flattrade",
                 "fyers",
                 "groww",
+                "hdfcsky",
                 "ibulls",
                 "iifl",
                 "jainamxts",

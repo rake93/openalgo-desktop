@@ -116,6 +116,15 @@ pub fn authorize_url(
             api_key,
             state,
         )),
+        // HDFC Sky (web BrokerSelect.tsx builds `/oapi/v1/login?api_key=`).
+        // The callback must echo `state` for the sign-in to complete; if
+        // HDFC Sky drops it, the callback needs a state-less path keyed on
+        // the pending login instead (shared-layer change).
+        "hdfcsky" => Some(format!(
+            "https://developer.hdfcsky.com/oapi/v1/login?api_key={}&state={}",
+            enc(api_key),
+            enc(state)
+        )),
         "flattrade" => Some(crate::brokers::families::noren::authorize_url(
             crate::brokers::flattrade::config(),
             api_key,
@@ -337,6 +346,21 @@ mod tests {
         assert!(f[1].secret && !f[0].secret);
         let p = q(&[("code", "c1"), ("state", "s")]);
         assert_eq!(extract_code("shoonya", &p).as_deref(), Some("c1"));
+    }
+
+    #[test]
+    fn hdfcsky_login_url_and_callback_token() {
+        assert_eq!(auth_type("hdfcsky"), AuthType::OAuth);
+        let u = authorize_url("hdfcsky", "key 1", "r", "st7").unwrap();
+        assert_eq!(
+            u,
+            "https://developer.hdfcsky.com/oapi/v1/login?api_key=key%201&state=st7"
+        );
+        for k in ["request_token", "requestToken", "request-token", "code"] {
+            let p = q(&[(k, "rt9"), ("state", "st7")]);
+            assert_eq!(extract_code("hdfcsky", &p).as_deref(), Some("rt9"), "{}", k);
+        }
+        assert!(login_fields("hdfcsky").is_empty());
     }
 
     #[test]
